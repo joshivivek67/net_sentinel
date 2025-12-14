@@ -1,0 +1,39 @@
+[package]
+name = "net_sentinel"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# Error Handing 
+anyhow = "1.0.42"
+csv = "1.2.2"
+
+# Async Runtime (for real-time task)
+# Async Runtime (for real-time task)
+tokio = { version = "1.44.2", features = ["full"] }
+log = "0.4"
+env_logger = "0.10"
+
+#Network Packet Capture
+pcap = "1.1"
+etherparse = "0.13"
+
+#AI and ML
+extended-isolation-forest = { version = "0.2.3", features = ["serde"] }
+ndarray = { version = "0.16", features = ["serde"] }
+
+
+#Serialization 
+serde = {version = "1.0", features = ["derive"]}
+serde_json = "1.0"
+serde_yaml = "0.8"
+
+
+
+
+[lints.rust]
+unused = "allow"
+unsafe_code = "allow"
+
+[lints.clippy]
+enum_glob_use = "allow"
