@@ -1,11 +1,18 @@
+use crossbeam_channel::bounded;
+use crossterm::event::Event;
 use log::info;
 use std::env;
 use std::process;
+use std::time::Duration;
 mod capture;
 mod ml;
+pub mod tui;
 mod utils;
 
-fn main() {
+use tui::App;
+use tui::terminal::TuiManager;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     if env::var("RUST_LOG").is_err() {
         unsafe {
             env::set_var("RUST_LOG", "info");
@@ -24,6 +31,7 @@ fn main() {
         .map(|s| s.as_str())
         .unwrap_or("capture");
     info!("NetSentinal starting in [{}] mode ...", mode);
+
     if mode == "train" {
         // ---- Brain Mode ----
         info!("Loading Data...");
@@ -32,10 +40,21 @@ fn main() {
         info!("Model Trained Successfully!");
         ml::save_model(&model).unwrap();
         info!("Model Saved Successfully!");
+    } else if mode == "capture" {
+        let device = match capture::get_device_default_interface() {
+            Ok(d) => d,
+            Err(e) => {
+                info!("Error finding device: {}", e);
+                process::exit(1);
+            }
+        };
+        capture::start_training_capture(device).unwrap();
     } else if mode == "guard" {
         // --- GUARD MODE --- 🛡️
         info!("Loading Brain...");
 
+        let (tx, rx) = bounded::<capture::PacketFiled>(100);
+        let mut app = App::new();
         // 1. Load the model from disk (We need to write this helper
         let model = ml::load_model("model_isolation_forest.json").unwrap();
 
@@ -50,9 +69,29 @@ fn main() {
 
         // 2. Start capturing WITH the model
         // We will need to create a new function in capture.rs called 'start_guard'
-        capture::start_guard(device, &model).unwrap();
+        std::thread::spawn(move || {
+            capture::start_background_capture(device, model, tx).unwrap();
+        });
 
         info!("Guard active.");
+        let mut tui = TuiManager::new()?;
+        loop {
+            tui.terminal.draw(|frame| {
+                tui::ui::render(frame, &app);
+            })?;
+            if crossterm::event::poll(Duration::from_millis(100))? {
+                if let Event::Key(key_event) = crossterm::event::read()? {
+                    if key_event.code == crossterm::event::KeyCode::Char('q')
+                        || key_event.code == crossterm::event::KeyCode::Esc
+                    {
+                        break;
+                    }
+                }
+            }
+            while let Ok(pf) = rx.try_recv() {
+                app.on_tick(pf);
+            }
+        }
     } else {
         let device = match capture::get_device_default_interface() {
             Ok(device) => device,
@@ -61,9 +100,6 @@ fn main() {
                 process::exit(1);
             }
         };
-
-        if let Err(e) = capture::start_capture(device) {
-            info!("Failed to start capture: {}", e);
-        }
     }
+    Ok(())
 }

@@ -1,4 +1,5 @@
 /target
+/.agent/
 *.json
 *.csv
 /docs
